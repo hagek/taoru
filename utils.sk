@@ -1,0 +1,14 @@
+#contribution: hage
+
+options:
+	PREFIX: "&9‣"
+
+#エラーメッセージを送る
+function err(players: players, message: string, silent: boolean = false):
+	send "{@PREFIX}&c%uncolored {_message}%" to {_players::*}
+	{_silent}
+	play sound "UI_BUTTON_CLICK" to {_player::*} with volume 1 and pitch 10
+
+#スペクテイター含む参加者に通知
+function notify(message: string):
+	

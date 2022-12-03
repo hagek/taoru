@@ -1,0 +1,89 @@
+#contribution: taoru, hage
+import:
+	org.bukkit.Bukkit
+	ch.njol.skript.Skript
+	java.lang.Runnable
+
+options:
+	COUNTDOWN: 20
+	REQUIRED_PLAYERS: 2
+	MINORITY_SELECTION_LENGTH: 60
+	ROUND_LENGTH: 120
+
+function ready_to_start():
+	{dam::gamestate} is not "waiting_to_start"
+	set {dam::gamestate} to "waiting_to_start"
+	send "{@PREFIX}&a人数が集まったため間もなく試合を開始します..." to all players
+	play sound "ENTITY_EXPERIENCE_ORB_PICKUP" to all players with volume 1 and pitch 5
+	set {_} to {@COUNTDOWN}
+	create new section with {_proxy} stored in {_functions::run}:
+		remove 1 from {_}
+		if mod({_}, 5) is 0:
+			send "{@PREFIX}&8開始まで&a%{_}%" to all players
+		{_} is 0
+		minority_selection()
+		{dam::game::task}.cancel()
+	set {_proxy} to new proxy instance of Runnable using {_functions::*}
+	set {dam::game::task} to Bukkit.getScheduler().runTaskTimer(Skript.getInstance(), {_proxy}, 20, 0)
+
+function minority_selection():
+	set {dam::gamestate} to "minority_selection"
+	set {_} to {@MINORITY_SELECTION_LENGTH}
+	create new section with {_proxy} stored in {_functions::run}:
+		remove 1 from {_}
+		set action bar of {dam::game::players::*} to "{@PREFIX}&8選択時間残り: &a&l%{_}%"
+		{_} is 0
+		loop {dam::game::players::*}:
+			if using_minority(loop-value) is not set
+				stop_game()
+				stop loop
+			{dam::game::task}.cancel()
+	set {_proxy} to new proxy instance of Runnable using {_functions::*}
+	set {dam::game::task} to Bukkit.getScheduler().runTaskTimer(Skript.getInstance(), {_proxy}, 20, 0)
+
+function stop_game():
+	{dam::game::task}.cancel()
+	clear {dam::game::*}
+
+function join(player: player):
+	if {dam::game::players::*} contains {_player}:
+		err({_player}, "既に参加しています")
+		stop
+	if {dam::gamestate} is not "waiting_for_players" or "waiting_to_start": #nor?
+		err({_player}, "現在は参加できません")
+		stop
+	add {_player} to {dam::game::players::*}
+	size of {dam::game::players::*} >= {@REQUIRED_PLAYERS}
+	ready_to_start()
+
+function leave(player: player, force: boolean):
+	{dam::game::players::*} contains {_player}
+	remove {_player} from {dam::game::players::*}
+	if {dam::gamestate} is "ready_to_start":
+		size of {dam::game::players::*} < {@REQUIRED_PLAYERS}
+		{dam::game::task}.cancel()
+	else if {dam::gamestate} is "minority_selection":
+		stop_game()
+
+#プレイヤーのチームを返す(不参加の場合none)
+function get_team(player: player) :: string:
+	{dam::game::players::*} contains {_player}
+	return {dam::game::player::%{_player}%::team}
+
+function is_joined(player: player) :: boolean:
+	return check [{dam::game::players::*} contains {_player}]
+
+#マイノリティーを選択する
+function set_minority(player: player, minority: string): 
+	if {dam::game::players::*} contains {_player}:
+		err({_player}, "ゲームに参加していません")
+		stop
+	if {dam::gamestate} is not "minority_selection":
+		err({_player}, "現在はマイノリティーを選べません")
+		stop
+	set {dam::game::player::%{_player}%::minority} to {_minority}
+
+#使っているマイノリティーを返す
+function using_minority(player: player):
+	{dam::game::players::*} contains {_player}
+	return {dam::game::player::%{_player}%::minority}
