@@ -9,18 +9,25 @@ options:
 	REQUIRED_PLAYERS: 2
 	MINORITY_SELECTION_LENGTH: 60
 	ROUND_LENGTH: 120
+	MINORITY_PICK_BASE_A: location(10, 0, 0, "world")
+	MINORITY_PICK_BASE_A: location(-10, 0, 0, "world")
+
+on leave:
+	{dam::game::players::*} contains player
+	leave(player)
 
 function ready_to_start():
 	{dam::gamestate} is not "waiting_to_start"
 	set {dam::gamestate} to "waiting_to_start"
 	send "{@PREFIX}&a人数が集まったため間もなく試合を開始します..." to all players
 	play sound "ENTITY_EXPERIENCE_ORB_PICKUP" to all players with volume 1 and pitch 5
-	set {_} to {@COUNTDOWN}
+	set {dam::time} to {@COUNTDOWN}
 	create new section with {_proxy} stored in {_functions::run}:
-		remove 1 from {_}
-		if mod({_}, 5) is 0:
-			send "{@PREFIX}&8開始まで&a%{_}%" to all players
-		{_} is 0
+		remove 1 from {dam::time}
+		if mod({dam::time}, 5) is 0:
+			send "{@PREFIX}&8開始まで&a%{dam::time}%" to all players
+		{dam::time} is 0
+		set {dam::game::stage} to random element out of get_valid_stages()
 		minority_selection()
 		{dam::game::task}.cancel()
 	set {_proxy} to new proxy instance of Runnable using {_functions::*}
@@ -28,23 +35,42 @@ function ready_to_start():
 
 function minority_selection():
 	set {dam::gamestate} to "minority_selection"
-	set {_} to {@MINORITY_SELECTION_LENGTH}
+	teleport get_team_players("A") to {@MINORITY_PICK_BASE_A}
+	teleport get_team_players("B") to {@MINORITY_PICK_BASE_B}
+	set {dam::time} to {@MINORITY_SELECTION_LENGTH}
 	create new section with {_proxy} stored in {_functions::run}:
-		remove 1 from {_}
-		set action bar of {dam::game::players::*} to "{@PREFIX}&8選択時間残り: &a&l%{_}%"
-		{_} is 0
+		remove 1 from {dam::time}
+		send action bar "{@PREFIX}&8選択時間残り: &a&l%{dam::time}%" to {dam::game::players::*}
+		{dam::time} is 0
+		set {_} to true
 		loop {dam::game::players::*}:
-			if using_minority(loop-value) is not set
-				stop_game()
-				stop loop
-			{dam::game::task}.cancel()
+			set {_} to check[{_}] -> check [using_minority(loop-value) is set]
+		if {_}:
+			game_main()
+		else:
+			stop_game()
+		{dam::game::task}.cancel()
 	set {_proxy} to new proxy instance of Runnable using {_functions::*}
 	set {dam::game::task} to Bukkit.getScheduler().runTaskTimer(Skript.getInstance(), {_proxy}, 20, 0)
+
+function game_main():
+	set {_s} to {dam::game::stage}
+	set {_p::*} to {dam::game::players::*}
+	set {_round} to 0
+	set gamemode of {_p::*} to spectator
+	teleport {_p::*} to get_spectator_spawn({_stage})
+	play sound "ENTITY_WITHER_SPAWN" to {_p::*} with volume 1 and pitch 10
+	wait 5 seconds
+	while true: 
+		clear inventory of {_p::*}
+		add 1 to {_round}
+		teleport {}
 
 function stop_game():
 	{dam::game::task}.cancel()
 	clear {dam::game::*}
 
+#プレイヤーが参加した処理
 function join(player: player):
 	if {dam::game::players::*} contains {_player}:
 		err({_player}, "既に参加しています")
@@ -56,20 +82,30 @@ function join(player: player):
 	size of {dam::game::players::*} >= {@REQUIRED_PLAYERS}
 	ready_to_start()
 
+#プレイヤーが抜けた処理
 function leave(player: player, force: boolean):
-	{dam::game::players::*} contains {_player}
 	remove {_player} from {dam::game::players::*}
 	if {dam::gamestate} is "ready_to_start":
 		size of {dam::game::players::*} < {@REQUIRED_PLAYERS}
 		{dam::game::task}.cancel()
+		err(all players, "&c人数が足りないため開始がキャンセルされました")
+		send all players title "" with subtitle "&c&lCANCELLED" to all players for 1.5 seconds with fadein 0 second and fadeout 0 second
 	else if {dam::gamestate} is "minority_selection":
 		stop_game()
+
+#チームに所属するプレイヤー一覧を返す
+function get_team_players(team: string) :: players:
+	loop {dam::game::players::*}:
+		get_team(loop-value) is {_team}
+		add loop-value to {_::*}
+	return {_::*}
 
 #プレイヤーのチームを返す(不参加の場合none)
 function get_team(player: player) :: string:
 	{dam::game::players::*} contains {_player}
 	return {dam::game::player::%{_player}%::team}
 
+#プレイヤーが参加しているか返す
 function is_joined(player: player) :: boolean:
 	return check [{dam::game::players::*} contains {_player}]
 

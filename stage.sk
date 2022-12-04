@@ -1,0 +1,16 @@
+function get_valid_stages() :: strings:
+	loop {dam::stage::*}:
+		is_released(loop-index)
+		add loop-index to {_::*}
+	return {_::*}
+
+function delete_stage(string: target):
+	delete {dam::stage::%{_target}%::*}
+
+function display_stage(players: players, stage: string):
+	loop {_players::*}:
+		set {_l::%loop-value%} to location of loop-value
+	teleport {_players::*} to get_spectator_spawn({_stage})
+	wait 4 seconds
+	loop {_players::*}:
+		teleport loop-value to {_l::%loop-value%}
